@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import os
 import argparse
 import header_parser
@@ -20,14 +22,10 @@ def main():
 
     ppm = os.open(path + args.file, os.O_RDONLY)
 
-    header_end = 0
-    header = os.read(ppm, 100).splitlines()
-    for item in header:
-        header_end += len(item) + 1
-        if item.startswith(b"#"):
-            comment = item
-        elif header.index(item) == 3:
-            break
+    header = header_parser.readHeader(ppm)
+
+    header_end = header[0]
+    comment = header[-1][0]
 
     comment = [int(i) for i in comment.split()[1:]]
 
