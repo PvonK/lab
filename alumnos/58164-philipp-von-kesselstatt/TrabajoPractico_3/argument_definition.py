@@ -8,7 +8,7 @@ def argument_definition():
     parser.add_argument("-p", "--port", type=int, default=5000,
                         help="port where server gets setup")
 
-    parser.add_argument("-d", "--document-root",
+    parser.add_argument("-d", "--document-root", default="/",
                         help="root directory")
 
     parser.add_argument("-s", "--size", type=int, default=1024,

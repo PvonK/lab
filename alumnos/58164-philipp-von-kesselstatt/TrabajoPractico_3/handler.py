@@ -38,7 +38,7 @@ class Handler(BaseRequestHandler):
 
         req = req.splitlines()
         page = req[0].split()[1].decode()
-        page = page.replace("%20", " ")
+        page = page.replace("%20", " ")  # toDo Solucionar la apertura de archivos con "ñ"
 
         if os.path.isfile(page):
             self.open_file(page)
@@ -53,7 +53,7 @@ class Handler(BaseRequestHandler):
                 self.ls_html(page)
 
         else:
-            self.notfound()
+            self.notFound()
 
     def ls_html(self, page):
 
@@ -82,19 +82,20 @@ class Handler(BaseRequestHandler):
                 h.createHiperlink(page + data, data)
                 h.addLine()
 
-        htmlCode = h.getHtml().encode()
-        header = b"HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: "
-        header += str(len(htmlCode)).encode() + b"\n\n"
-        self.request.sendall(header + htmlCode)
+        html_code = h.getHtml().encode()
+        http_header = b"HTTP/1.1 200 OK\nContent-Type: text/html\nContent-"
+        http_header += b"Length: " + str(len(html_code)).encode() + b"\n\n"
+        self.request.sendall(http_header + html_code)
 
-    def notfound(self):
-        header = b"HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n"
-        self.request.sendall(header)
+    def notFound(self):
+        http_header = b"HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n"
+        self.request.sendall(http_header)
         self.open_file(os.path.dirname(__file__) + "/html/404.html")
 
-        # header = b"HTTP/1.1 200 OK\nContent-Type: */*\n\n"
-        # self.request.sendall(header)
+        # http_header = b"HTTP/1.1 200 OK\nContent-Type: */*\n\n"
+        # self.request.sendall(http_header)
         # self.open_file("/home/philipp/Git/compu2/lab/alumnos/58164-philipp-von-kesselstatt/TrabajoPractico_3/images/7o.ppm")
+        # ^ sirve para ver navegador le pone nombre al archivo a descargar
 
     def read_arguments(self, page):
         delimiter = page.find("?")
@@ -104,8 +105,11 @@ class Handler(BaseRequestHandler):
 
         if len(arguments) == 2:
             filtro = arguments[0][arguments[0].find("=")+1:]
-            scale = arguments[1][arguments[1].find("=")+1:]
-            param = (filtro, float(scale))
+            try:
+                scale = float(arguments[1][arguments[1].find("=")+1:])
+            except ValueError:
+                raise Exception  # toDo Crear excepcion especifica
+            param = (filtro, scale)
         else:
             param = ()
 
@@ -113,7 +117,7 @@ class Handler(BaseRequestHandler):
 
     def open_file(self, page, *arguments):
 
-        self.size = self.size - (self.size % 3)
+        self.size = self.size - (self.size % 3)  # toDo Mover esto al init del handler
 
         file_size = os.path.getsize(page)
         number_of_blocks = round(file_size/self.size+0.5)
@@ -121,13 +125,15 @@ class Handler(BaseRequestHandler):
         fd = os.open(page, os.O_RDONLY)
 
         if not arguments:
-            self.contentType = {".html": b"text/html",
+            self.contentType = {
+                                ".html": b"text/html",
                                 ".jpg": b"image",
                                 ".jpeg": b"image",
                                 ".png": b"image",
                                 ".pdf": b"application/pdf",
                                 ".mp3": b"audio/mpeg",
                                 }
+
             extension = page[page.find("."):]
 
             try:
@@ -135,21 +141,24 @@ class Handler(BaseRequestHandler):
             except KeyError:
                 typ = b"*/*"
 
-            header = b"HTTP/1.1 200 OK\nContent-Type: "
-            header += typ + b"\nContent-Length: " + str(file_size).encode()
-            header += b"\n\n"
+            http_header = b"HTTP/1.1 200 OK\nContent-Type: "
+            http_header += typ + b"\nContent-Length: "
+            http_header += str(file_size).encode()
+            http_header += b"\n\n"
 
-            self.request.sendall(header)
+            self.request.sendall(http_header)
             self.read_and_send(fd, number_of_blocks)
 
         else:
 
             filtro, scale = arguments
-            self.color_filter(filtro,
+            self.color_filter(
+                              filtro,
                               scale,
                               fd,
                               number_of_blocks,
-                              file_size)
+                              file_size
+                              )
 
         os.close(fd)
 
@@ -165,36 +174,44 @@ class Handler(BaseRequestHandler):
                      number_of_blocks,
                      file_size):
 
+        filters = {  # Mover la definicion de este diccionario al init
+                   "W": thread_work.thread_black_white,
+                   "R": thread_work.thread_red_filter,
+                   "G": thread_work.thread_green_filter,
+                   "B": thread_work.thread_blue_filter
+                   }
+
+        try:
+            func = filters[filtro]
+        except KeyError:
+            raise Exception  # toDo: Crear excepcion especifica
+
         hilos = fut.ThreadPoolExecutor()
 
         array_list = []
 
-        if filtro == "W":
-            func = thread_work.thread_black_white
-        elif filtro == "R":
-            func = thread_work.thread_red_filter
-        elif filtro == "G":
-            func = thread_work.thread_green_filter
-        elif filtro == "B":
-            func = thread_work.thread_blue_filter
-        else:
-            raise Exception  # toDo: crear excepcion para filtros mal
-
         header_end, width, height, max_v, comments = readHeader(fd)
-        new_header = createHeader(width, height, max_v)
+        ppm_header = createHeader(width, height, max_v)
+
+        http_header = b"HTTP/1.1 200 OK\nContent-Type: */*\n"
+        http_header += "Content-Length: {}\n\n".format(
+                                file_size - header_end + len(ppm_header)
+                                ).encode()
+
+        self.request.sendall(http_header + ppm_header.encode())
 
         os.lseek(fd, header_end, 0)
         for i in range(number_of_blocks):
-            file_block = [i for i in os.read(fd, self.size)]
-            array_list.append(hilos.submit(func,
-                                           file_block, file_size, scale, max_v)
+            file_block = os.read(fd, self.size)
+            array_list.append(
+                              hilos.submit(func,
+                                           file_block,
+                                           scale,
+                                           max_v
+                                           )
                               )
 
-        a = b""
         for ar in array_list:
-            a += ar.result()
+            self.request.sendall(ar.result())
 
-        header = b"HTTP/1.1 200 OK\nContent-Type: */*\n\n"
-
-        self.request.sendall(header)
-        self.request.sendall(new_header.encode() + a)
+    # def internalServerError(self, message): toDo

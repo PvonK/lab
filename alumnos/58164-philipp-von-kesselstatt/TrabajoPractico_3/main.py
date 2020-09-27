@@ -1,7 +1,6 @@
 from argument_definition import argument_definition
 from socketserver import ThreadingTCPServer
 from handler import Handler
-import os
 
 
 def server_setup(port, directory, size):
@@ -15,9 +14,6 @@ def server_setup(port, directory, size):
 
 def main():
     args = argument_definition()
-
-    if not args.document_root:
-        args.document_root = os.path.dirname(__file__) + "/images/"
 
     server_setup(args.port, args.document_root, args.size)
 
