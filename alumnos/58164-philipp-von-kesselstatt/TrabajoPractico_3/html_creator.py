@@ -28,15 +28,16 @@ class HtmlCreator():
 
         self.form_list = []
 
-    def createTextInput(self, text, form_id, name, value=''):
+    def createTextInput(self, typ, text, form_id, name, value='', minimum='', step=''):
 
         output = ''
 
         output += '<label for="{}">{}</label>'.format(form_id, text)
-        output += '''<input type="text"
+        output += '''<input type="{}" min="{}" step="{}"
                      id="{}"
                      name="{}"
-                     value="{}">'''.format(form_id, name, value)
+                     value="{}">'''\
+                         .format(typ, minimum, step, form_id, name, value)
 
         self.form_list.append(output)
 

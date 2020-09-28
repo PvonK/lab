@@ -25,4 +25,4 @@ def readHeader(fd):
 
 
 def createHeader(width, height, max_c, comments=""):
-    return "P6\n" + comments + "\n" + str(width) + " " + str(height) + "\n" + str(max_c) + "\n"
+    return "P6\n"+comments+"\n"+str(width)+" "+str(height)+"\n"+str(max_c)+"\n"

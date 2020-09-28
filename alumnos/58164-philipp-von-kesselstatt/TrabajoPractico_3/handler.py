@@ -4,11 +4,14 @@ import thread_work
 import concurrent.futures as fut
 from header_parser import readHeader, createHeader
 from html_creator import HtmlCreator
+from exceptions import InternalServerError, NotFoundError
+# toDo: Poner explicaciones en comentarios
 
 
 class Handler(BaseRequestHandler):
 
     def handle(self):
+
         enviado = self.request.recv(1024).strip()
         print(enviado.decode() + "\n\n")
         self.requestParser(enviado)
@@ -38,7 +41,7 @@ class Handler(BaseRequestHandler):
 
         req = req.splitlines()
         page = req[0].split()[1].decode()
-        page = page.replace("%20", " ")  # toDo Solucionar la apertura de archivos con "ñ"
+        page = page.replace("%20", " ")
 
         if os.path.isfile(page):
             self.open_file(page)
@@ -53,7 +56,7 @@ class Handler(BaseRequestHandler):
                 self.ls_html(page)
 
         else:
-            self.notFound()
+            self.notFound(page)
 
     def ls_html(self, page):
 
@@ -74,7 +77,8 @@ class Handler(BaseRequestHandler):
                 h.createRadioInput("B", "filter", "B", "Blue")
                 h.createRadioInput("W", "filter", "W", "Black & White")
 
-                h.createTextInput("Scale:", "scale", "scale", 1)
+                h.createTextInput("number", "Scale:", "scale", "scale",
+                                  minimum=0, step=0.01)
 
                 h.createForm(page + data, data, False)
 
@@ -87,10 +91,13 @@ class Handler(BaseRequestHandler):
         http_header += b"Length: " + str(len(html_code)).encode() + b"\n\n"
         self.request.sendall(http_header + html_code)
 
-    def notFound(self):
+    def notFound(self, message):
         http_header = b"HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n"
         self.request.sendall(http_header)
-        self.open_file(os.path.dirname(__file__) + "/html/404.html")
+        fd = os.open(os.path.dirname(__file__) + "/html/404.html", os.O_RDONLY)
+        self.read_and_send(fd, round(170/self.size+0.5))
+
+        raise NotFoundError(message)
 
         # http_header = b"HTTP/1.1 200 OK\nContent-Type: */*\n\n"
         # self.request.sendall(http_header)
@@ -99,6 +106,11 @@ class Handler(BaseRequestHandler):
 
     def read_arguments(self, page):
         delimiter = page.find("?")
+
+        if os.path.isdir(page[:delimiter]):
+            message = "Cant put arguments on that page ({})".format(page)
+            self.internalServerError(message)
+
         arguments = page[delimiter+1:]
 
         arguments = arguments.split("&")
@@ -108,16 +120,23 @@ class Handler(BaseRequestHandler):
             try:
                 scale = float(arguments[1][arguments[1].find("=")+1:])
             except ValueError:
-                raise Exception  # toDo Crear excepcion especifica
+                message = "' {} ' is not a valid scale value"\
+                    .format(arguments[1][arguments[1].find("=")+1:])
+                self.internalServerError(message)
+
             param = (filtro, scale)
         else:
             param = ()
 
-        self.open_file(page[:delimiter], *param)
+        page = page[:delimiter]
+
+        if not page.endswith(".ppm"):
+            self.internalServerError("Can't put filter on {}".format(page))
+        self.open_file(page, *param)
 
     def open_file(self, page, *arguments):
 
-        self.size = self.size - (self.size % 3)  # toDo Mover esto al init del handler
+        self.size = self.size - (self.size % 3)
 
         file_size = os.path.getsize(page)
         number_of_blocks = round(file_size/self.size+0.5)
@@ -125,19 +144,20 @@ class Handler(BaseRequestHandler):
         fd = os.open(page, os.O_RDONLY)
 
         if not arguments:
-            self.contentType = {
-                                ".html": b"text/html",
-                                ".jpg": b"image",
-                                ".jpeg": b"image",
-                                ".png": b"image",
-                                ".pdf": b"application/pdf",
-                                ".mp3": b"audio/mpeg",
-                                }
+
+            contentType = {
+                            ".html": b"text/html",
+                            ".jpg": b"image",
+                            ".jpeg": b"image",
+                            ".png": b"image",
+                            ".pdf": b"application/pdf",
+                            ".mp3": b"audio/mpeg",
+                            }
 
             extension = page[page.find("."):]
 
             try:
-                typ = self.contentType[extension]
+                typ = contentType[extension]
             except KeyError:
                 typ = b"*/*"
 
@@ -174,7 +194,7 @@ class Handler(BaseRequestHandler):
                      number_of_blocks,
                      file_size):
 
-        filters = {  # Mover la definicion de este diccionario al init
+        filters = {
                    "W": thread_work.thread_black_white,
                    "R": thread_work.thread_red_filter,
                    "G": thread_work.thread_green_filter,
@@ -184,7 +204,9 @@ class Handler(BaseRequestHandler):
         try:
             func = filters[filtro]
         except KeyError:
-            raise Exception  # toDo: Crear excepcion especifica
+            self.internalServerError(
+                                    "Filter '{}' not supported".format(filtro)
+                                     )
 
         hilos = fut.ThreadPoolExecutor()
 
@@ -214,4 +236,18 @@ class Handler(BaseRequestHandler):
         for ar in array_list:
             self.request.sendall(ar.result())
 
-    # def internalServerError(self, message): toDo
+    def internalServerError(self, message):
+
+        h = HtmlCreator()
+        h.title(h.centerText("500 Internal Server Error"), 1)
+        h.title(h.centerText(message), 3)
+
+        code = h.getHtml().encode()
+
+        http_header = b"HTTP/1.1 500 Internal Server Error\n"
+        http_header += b"Content-Type: text/html\n"
+        http_header += "Content-Length: {}\n\n".format(len(code)).encode()
+
+        self.request.sendall(http_header + code)
+
+        raise InternalServerError(message)
