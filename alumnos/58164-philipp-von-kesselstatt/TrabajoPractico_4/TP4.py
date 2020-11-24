@@ -28,7 +28,7 @@ async def debug_file(path, req, func):
 
 
 async def handler(reader, writer):
-    path = os.path.dirname(__file__) + "/"
+    path = os.getcwd() + "/"
     address = writer.get_extra_info('peername')
     asyncio.create_task(log_user(path, address[0], address[1]))
 
