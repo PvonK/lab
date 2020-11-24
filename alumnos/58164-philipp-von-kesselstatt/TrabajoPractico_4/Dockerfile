@@ -5,6 +5,5 @@ RUN apk add git
 RUN git clone https://github.com/PvonK/lab.git
 WORKDIR /lab/alumnos/58164-philipp-von-kesselstatt/TrabajoPractico_4/
 
-# RUN pip install -r requirements.txt
 
-CMD [ "python3", "TP4.py" ]
+# CMD [ "python3", "TP4.py" ]
