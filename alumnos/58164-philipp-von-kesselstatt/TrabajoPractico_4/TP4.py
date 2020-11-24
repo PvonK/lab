@@ -164,4 +164,4 @@ if __name__ == "__main__":
     path = os.path.dirname(__file__) + "/"
     args = argument_definition()
 
-    asyncio.run(server(["172.17.0.2"], args.port))
+    asyncio.run(server(["localhost"], args.port))
