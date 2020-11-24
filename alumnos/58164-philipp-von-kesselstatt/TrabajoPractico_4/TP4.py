@@ -15,6 +15,18 @@ async def log_user(path, adress, port):
         f.write(log)
 
 
+async def debug_file(path, req, func):
+    time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log = "Fecha: {}\n".format(time)
+    log += "Request: {}\n".format(req)
+    log += "Funciones:\n{}\n".format(func)
+    log += "-"*140
+    log += "\n\n"
+
+    with open(path + "debug.txt", "a") as f:
+        f.write(log)
+
+
 async def handler(reader, writer):
     path = os.path.dirname(__file__) + "/"
     address = writer.get_extra_info('peername')
@@ -27,11 +39,14 @@ async def handler(reader, writer):
         try:
             if request == "/":
 
-                index = ls_html(path)
+                index = ls_html(args.document_root)
                 writer.write(index)
                 await writer.drain()
                 writer.close()
                 await writer.wait_closed()
+
+                funciones = """\tls_html({})
+                               """.format(args.document_root, index)
 
             elif os.path.isdir(request):
 
@@ -40,6 +55,9 @@ async def handler(reader, writer):
                 await writer.drain()
                 writer.close()
                 await writer.wait_closed()
+
+                funciones = """\tls_html({})
+                               """.format(request, index)
 
             elif os.path.isfile(request):
                 header = create_http_header(request)
@@ -54,11 +72,17 @@ async def handler(reader, writer):
                 writer.close()
                 await writer.wait_closed()
 
-            else:
+                funciones = "\tcreate_http_header({})\n".format(request) + \
+                            "\tos.open({}, os.O_RDONLY)\n".format(request) + \
+                            "\tos.read({}, args.size)\n".format(fd)
 
-                header = create_http_header(path + "html/404.html")
+                os.close(fd)
+
+            else:
+                err = path + "html/404.html"
+                header = create_http_header(err)
                 writer.write(header)
-                fd = os.open(path + "html/404.html", os.O_RDONLY)
+                fd = os.open(err, os.O_RDONLY)
                 while True:
                     body = os.read(fd, args.size)
                     writer.write(body)
@@ -67,10 +91,18 @@ async def handler(reader, writer):
                 await writer.drain()
                 writer.close()
                 await writer.wait_closed()
-        except:
-            header = create_http_header(path + "html/500.html")
+
+                funciones = "\tcreate_http_header({})\n".format(request) + \
+                            "\tos.open({}, os.O_RDONLY)\n".format(request) + \
+                            "\tos.read({}, args.size)\n".format(fd)
+
+                os.close(fd)
+
+        except Exception:
+            err = path + "html/500.html"
+            header = create_http_header(err)
             writer.write(header)
-            fd = os.open(path + "html/500.html", os.O_RDONLY)
+            fd = os.open(err, os.O_RDONLY)
             while True:
                 body = os.read(fd, args.size)
                 writer.write(body)
@@ -79,6 +111,15 @@ async def handler(reader, writer):
             await writer.drain()
             writer.close()
             await writer.wait_closed()
+
+            funciones = "\tcreate_http_header({})\n".format(request) + \
+                        "\tos.open({}, os.O_RDONLY)\n".format(request) + \
+                        "\tos.read({}, args.size)\n".format(fd)
+
+            os.close(fd)
+
+        if args.debug:
+            asyncio.create_task(debug_file(path, request, funciones))
 
 
 def create_http_header(page):
@@ -123,4 +164,4 @@ if __name__ == "__main__":
     path = os.path.dirname(__file__) + "/"
     args = argument_definition()
 
-    asyncio.run(server(["127.0.0.1", "::1"], args.port))
+    asyncio.run(server(["localhost", "ip6-localhost"], args.port))
